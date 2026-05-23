@@ -1,0 +1,428 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Vistaar QAOA | Final Dispatch</title>
+    
+    <!-- Leaflet CSS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.1/socket.io.js"></script>
+    
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;800&family=Fira+Code:wght@400;600&display=swap');
+
+        body {
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+            background-color: #05050A;
+            font-family: 'Inter', sans-serif;
+            color: #ffffff;
+        }
+
+        #map {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            z-index: 0;
+        }
+
+        /* Darken map slightly */
+        #map::after {
+            content: '';
+            position: absolute;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(5, 5, 10, 0.3);
+            pointer-events: none;
+            z-index: 400; /* Above tiles, below markers */
+        }
+
+        /* Glassmorphic Overlay UI */
+        .ui-layer {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            z-index: 1000;
+            pointer-events: none;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            padding: 40px;
+            box-sizing: border-box;
+        }
+
+        .header-panel {
+            text-align: center;
+            animation: fadeInDown 1s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+        }
+
+        .stage-badge {
+            display: inline-block;
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+            padding: 8px 16px;
+            border-radius: 20px;
+            font-size: 0.8rem;
+            letter-spacing: 2px;
+            text-transform: uppercase;
+            color: #22c55e;
+            margin-bottom: 15px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.5), inset 0 0 10px rgba(34, 197, 94, 0.2);
+        }
+
+        .title {
+            font-size: 3rem;
+            font-weight: 800;
+            margin: 0;
+            background: linear-gradient(135deg, #ffffff 0%, #22c55e 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            text-shadow: 0 0 40px rgba(34, 197, 94, 0.3);
+            letter-spacing: -1px;
+        }
+
+        .subtitle {
+            font-size: 1.2rem;
+            color: #94a3b8;
+            margin-top: 10px;
+            font-weight: 300;
+            text-shadow: 0 2px 4px rgba(0,0,0,0.8);
+        }
+
+        .side-panel {
+            position: absolute;
+            bottom: 40px;
+            right: 40px;
+            width: 450px;
+            background: rgba(15, 23, 42, 0.8);
+            backdrop-filter: blur(20px);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            border-radius: 16px;
+            padding: 24px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.8);
+            animation: slideInRight 1s 0.5s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+            opacity: 0;
+            transform: translateX(40px);
+            pointer-events: auto;
+        }
+
+        .panel-header {
+            font-size: 0.9rem;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            color: #cbd5e1;
+            margin-bottom: 20px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .live-dot {
+            width: 8px;
+            height: 8px;
+            background-color: #ef4444;
+            border-radius: 50%;
+            box-shadow: 0 0 10px #ef4444;
+            animation: pulse 2s infinite;
+        }
+
+        .live-dot.active {
+            background-color: #22c55e;
+            box-shadow: 0 0 10px #22c55e;
+        }
+
+        /* Final Output Panel Styling */
+        .output-panel {
+            background: rgba(0,0,0,0.4);
+            border: 1px solid rgba(34, 197, 94, 0.3);
+            border-radius: 8px;
+            padding: 15px;
+            margin-bottom: 20px;
+            box-shadow: inset 0 0 20px rgba(34, 197, 94, 0.05);
+        }
+
+        .output-row {
+            display: flex;
+            margin-bottom: 8px;
+            font-size: 0.85rem;
+        }
+        .output-row:last-child { margin-bottom: 0; }
+        
+        .output-label {
+            color: #94a3b8;
+            width: 90px;
+            flex-shrink: 0;
+            font-weight: 600;
+        }
+        
+        .output-value {
+            color: #f8fafc;
+            font-family: 'Fira Code', monospace;
+        }
+
+        .output-reason {
+            margin-top: 10px;
+            padding-top: 10px;
+            border-top: 1px dashed rgba(255,255,255,0.1);
+            color: #4ade80;
+            font-size: 0.85rem;
+            font-style: italic;
+        }
+
+        .eta-container {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background: rgba(255,255,255,0.05);
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+        }
+
+        .eta-label { color: #cbd5e1; font-weight: 600; text-transform: uppercase; letter-spacing: 1px; }
+        .eta-value { font-size: 2rem; font-weight: 800; color: #22c55e; font-family: 'Fira Code', monospace; text-shadow: 0 0 15px rgba(34, 197, 94, 0.6); }
+
+        .log-list {
+            list-style: none;
+            padding: 0;
+            margin: 0;
+            font-family: 'Fira Code', monospace;
+            font-size: 0.75rem;
+            color: #94a3b8;
+            height: 100px;
+            overflow-y: auto;
+        }
+
+        .log-list::-webkit-scrollbar { width: 4px; }
+        .log-list::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.2); }
+
+        .log-item {
+            margin-bottom: 10px;
+            padding-left: 15px;
+            position: relative;
+            opacity: 0;
+        }
+        .log-item::before { content: '>'; position: absolute; left: 0; color: #22c55e; }
+        .log-item.active { color: #f8fafc; text-shadow: 0 0 10px rgba(255,255,255,0.3); }
+
+        /* Custom Leaflet Markers */
+        .neon-marker {
+            background: #22c55e;
+            border-radius: 50%;
+            box-shadow: 0 0 15px 5px rgba(34, 197, 94, 0.6);
+            border: 2px solid #fff;
+        }
+        .neon-marker.pulse { animation: pulse 1.5s infinite; }
+        .hospital-marker { background: #38bdf8; box-shadow: 0 0 15px 5px rgba(56, 189, 248, 0.6); }
+        .patient-marker { background: #ef4444; box-shadow: 0 0 15px 5px rgba(239, 68, 68, 0.6); }
+
+        .ambulance-icon {
+            font-size: 24px;
+            text-align: center;
+            line-height: 24px;
+            filter: drop-shadow(0 0 10px rgba(255,255,255,0.8));
+            transition: all 0.5s linear;
+        }
+
+        /* Animations */
+        @keyframes fadeInDown { to { opacity: 1; transform: translateY(0); } }
+        @keyframes slideInRight { to { opacity: 1; transform: translateX(0); } }
+        @keyframes pulse { 0%, 100% { transform: scale(1); opacity: 1; } 50% { transform: scale(1.5); opacity: 0.5; } }
+        @keyframes fadeInLog { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
+
+        /* Glowing Route CSS */
+        .glowing-route {
+            stroke: #22c55e;
+            stroke-width: 6;
+            stroke-linecap: round;
+            stroke-linejoin: round;
+            filter: drop-shadow(0 0 8px #22c55e);
+            animation: dash 2s linear infinite;
+        }
+        .route-bg {
+            stroke: #22c55e;
+            stroke-width: 12;
+            opacity: 0.2;
+        }
+
+        @keyframes dash {
+            to { stroke-dashoffset: -20; }
+        }
+    </style>
+</head>
+<body>
+
+    <div id="map"></div>
+
+    <div class="ui-layer">
+        <div class="header-panel">
+            <div class="stage-badge">Phase 4 Active</div>
+            <h1 class="title">Route Finalization & Dispatch</h1>
+            <div class="subtitle" id="main-status">Awaiting Quantum Route Sync...</div>
+        </div>
+
+        <div class="side-panel">
+            <div class="panel-header">
+                <div class="live-dot" id="live-indicator"></div>
+                Green Corridor Dispatch
+            </div>
+            
+            <div class="output-panel">
+                <div class="output-row">
+                    <div class="output-label">SOURCE:</div>
+                    <div class="output-value" id="val-src">Awaiting Sync...</div>
+                </div>
+                <div class="output-row">
+                    <div class="output-label">DESTINATION:</div>
+                    <div class="output-value" id="val-dest">Awaiting Sync...</div>
+                </div>
+                <div class="output-reason" id="val-reason">
+                    Initializing telemetry stream...
+                </div>
+            </div>
+
+            <div class="eta-container">
+                <div class="eta-label">Live ETA</div>
+                <div class="eta-value" id="val-eta">14 MIN</div>
+            </div>
+
+            <ul class="log-list" id="log-list">
+                <!-- Logs populated by JS -->
+            </ul>
+        </div>
+    </div>
+
+    <script>
+        const socket = io();
+
+        // UI Elements
+        const logContainer = document.getElementById('log-list');
+        const mainStatus = document.getElementById('main-status');
+        const valSrc = document.getElementById('val-src');
+        const valDest = document.getElementById('val-dest');
+        const valReason = document.getElementById('val-reason');
+        const valEta = document.getElementById('val-eta');
+        const liveIndicator = document.getElementById('live-indicator');
+
+        function appendLog(text) {
+            const li = document.createElement('li');
+            li.className = 'log-item';
+            li.innerText = `[${new Date().toLocaleTimeString()}] ${text}`;
+            li.style.animation = `fadeInLog 0.5s forwards`;
+            logContainer.appendChild(li);
+
+            document.querySelectorAll('.log-item').forEach(el => el.classList.remove('active'));
+            li.classList.add('active');
+            logContainer.scrollTop = logContainer.scrollHeight;
+        }
+
+        // --- LEAFLET MAP SETUP ---
+        const map = L.map('map', {
+            zoomControl: false,
+            attributionControl: false
+        }).setView([12.968, 77.656], 14); // Center between Bagmane and Manipal HAL
+
+        // Dark Basemap
+        L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+            maxZoom: 19
+        }).addTo(map);
+
+        // Coordinates
+        const sourceLatLng = [12.9784, 77.6628]; // Bagmane Tech Park
+        const destLatLng = [12.9591, 77.6496];   // Manipal Hospital HAL
+        // Intermediate points to make a realistic road curve
+        const routeCoords = [
+            sourceLatLng,
+            [12.9750, 77.6610],
+            [12.9700, 77.6550],
+            [12.9630, 77.6530],
+            destLatLng
+        ];
+
+        // Markers
+        const sourceIcon = L.divIcon({ className: 'neon-marker hospital-marker', iconSize: [16,16] });
+        const destIcon = L.divIcon({ className: 'neon-marker patient-marker', iconSize: [16,16] });
+        const ambIcon = L.divIcon({ className: 'ambulance-icon', html: '🚑', iconSize: [24,24], iconAnchor: [12,12] });
+
+        L.marker(sourceLatLng, {icon: sourceIcon}).addTo(map);
+        L.marker(destLatLng, {icon: destIcon}).addTo(map);
+        
+        let ambulanceMarker = null;
+
+        // Draw Route
+        const bgRoute = L.polyline(routeCoords, { className: 'route-bg' }).addTo(map);
+        const glowingRoute = L.polyline(routeCoords, { className: 'glowing-route', dashArray: '10 10' }).addTo(map);
+
+        // --- SOCKET LISTENERS ---
+        socket.on('qaoa_stage4_log', (data) => appendLog(data.msg));
+
+        socket.on('qaoa_stage4_data', (data) => {
+            valSrc.innerText = data.source.toUpperCase();
+            valDest.innerText = data.destination.toUpperCase();
+            valReason.innerText = data.reason;
+            liveIndicator.classList.add('active');
+        });
+
+        socket.on('qaoa_stage4_eta', (data) => {
+            valEta.innerText = `${data.eta} MIN`;
+            
+            // Move ambulance roughly along path based on ETA (14 to 0)
+            if(!ambulanceMarker) {
+                ambulanceMarker = L.marker(sourceLatLng, {icon: ambIcon}).addTo(map);
+            }
+            
+            const progress = 1 - (data.eta / 14); // 0 to 1
+            // Simple linear interpolation across coordinates for demonstration
+            if(progress >= 1) {
+                ambulanceMarker.setLatLng(destLatLng);
+            } else {
+                const totalSegments = routeCoords.length - 1;
+                const segmentFloat = progress * totalSegments;
+                const segmentIndex = Math.floor(segmentFloat);
+                const segmentProgress = segmentFloat - segmentIndex;
+                
+                const p1 = routeCoords[segmentIndex];
+                const p2 = routeCoords[segmentIndex + 1];
+                
+                if(p1 && p2) {
+                    const lat = p1[0] + (p2[0] - p1[0]) * segmentProgress;
+                    const lng = p1[1] + (p2[1] - p1[1]) * segmentProgress;
+                    ambulanceMarker.setLatLng([lat, lng]);
+                }
+            }
+        });
+
+        socket.on('qaoa_stage4_stage', (data) => {
+            if(data.msg) mainStatus.innerText = data.msg;
+            
+            if(data.stage === 'arrived') {
+                mainStatus.style.color = "#4ade80";
+                valEta.innerText = "ARRIVED";
+                valEta.style.color = "#38bdf8";
+                
+                // Change patient marker to green
+                document.querySelectorAll('.patient-marker').forEach(el => {
+                    el.style.background = '#22c55e';
+                    el.style.boxShadow = '0 0 15px 5px rgba(34, 197, 94, 0.6)';
+                });
+
+                // Redirect to final dashboard
+                setTimeout(() => {
+                    const patientId = new URLSearchParams(window.location.search).get('patient_id') || 'UNKNOWN';
+                    window.location.href = '/cop?patient_id=' + patientId;
+                }, 4000);
+            }
+        });
+
+        // Start
+        socket.emit('start_qaoa_stage4', { status: 'init' });
+    </script>
+</body>
+</html>

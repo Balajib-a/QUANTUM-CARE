@@ -1,0 +1,461 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Vistaar QAOA | Route Optimization</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.1/socket.io.js"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;800&family=Fira+Code:wght@400;600&display=swap');
+
+        body {
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+            background-color: #05050A;
+            font-family: 'Inter', sans-serif;
+            color: #ffffff;
+        }
+
+        #webgl-container {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            z-index: 0;
+        }
+
+        /* Glassmorphic Overlay UI */
+        .ui-layer {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            z-index: 10;
+            pointer-events: none;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            padding: 40px;
+            box-sizing: border-box;
+            background: radial-gradient(circle at 50% 0%, rgba(34, 197, 94, 0.1), transparent 50%);
+        }
+
+        .header-panel {
+            text-align: center;
+            animation: fadeInDown 1s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+        }
+
+        .stage-badge {
+            display: inline-block;
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+            padding: 8px 16px;
+            border-radius: 20px;
+            font-size: 0.8rem;
+            letter-spacing: 2px;
+            text-transform: uppercase;
+            color: #4ade80;
+            margin-bottom: 15px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.5), inset 0 0 10px rgba(74, 222, 128, 0.2);
+        }
+
+        .title {
+            font-size: 3rem;
+            font-weight: 800;
+            margin: 0;
+            background: linear-gradient(135deg, #ffffff 0%, #4ade80 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            text-shadow: 0 0 40px rgba(74, 222, 128, 0.3);
+            letter-spacing: -1px;
+        }
+
+        .subtitle {
+            font-size: 1.2rem;
+            color: #94a3b8;
+            margin-top: 10px;
+            font-weight: 300;
+        }
+
+        .side-panel {
+            position: absolute;
+            bottom: 40px;
+            right: 40px;
+            width: 420px;
+            background: rgba(15, 23, 42, 0.7);
+            backdrop-filter: blur(20px);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            border-radius: 16px;
+            padding: 24px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.6);
+            animation: slideInRight 1s 0.5s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+            opacity: 0;
+            transform: translateX(40px);
+            pointer-events: auto;
+        }
+
+        .panel-header {
+            font-size: 0.9rem;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            color: #cbd5e1;
+            margin-bottom: 20px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .live-dot {
+            width: 8px;
+            height: 8px;
+            background-color: #22c55e;
+            border-radius: 50%;
+            box-shadow: 0 0 10px #22c55e;
+            animation: pulse 2s infinite;
+        }
+
+        .metrics-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 15px;
+            margin-bottom: 20px;
+            border-bottom: 1px solid rgba(255,255,255,0.1);
+            padding-bottom: 20px;
+        }
+
+        .metric-box {
+            background: rgba(255,255,255,0.03);
+            border: 1px solid rgba(255,255,255,0.05);
+            padding: 12px;
+            border-radius: 10px;
+        }
+
+        .metric-label {
+            font-size: 0.75rem;
+            color: #94a3b8;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .metric-value {
+            font-size: 1.5rem;
+            font-weight: 600;
+            color: #f8fafc;
+            margin-top: 5px;
+            font-family: 'Fira Code', monospace;
+        }
+
+        .metric-value.highlight { color: #4ade80; text-shadow: 0 0 10px rgba(74,222,128,0.5); }
+        .metric-value.warn { color: #ef4444; text-shadow: 0 0 10px rgba(239,68,68,0.5); }
+
+        .log-list {
+            list-style: none;
+            padding: 0;
+            margin: 0;
+            font-family: 'Fira Code', monospace;
+            font-size: 0.75rem;
+            color: #94a3b8;
+            height: 120px;
+            overflow-y: auto;
+        }
+
+        .log-list::-webkit-scrollbar { width: 4px; }
+        .log-list::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.2); }
+
+        .log-item {
+            margin-bottom: 10px;
+            padding-left: 15px;
+            position: relative;
+            opacity: 0;
+        }
+
+        .log-item::before {
+            content: '>';
+            position: absolute;
+            left: 0;
+            color: #4ade80;
+        }
+
+        .log-item.active {
+            color: #f8fafc;
+            text-shadow: 0 0 10px rgba(255,255,255,0.3);
+        }
+
+        /* Animations */
+        @keyframes fadeInDown { to { opacity: 1; transform: translateY(0); } }
+        @keyframes slideInRight { to { opacity: 1; transform: translateX(0); } }
+        @keyframes pulse { 0%, 100% { transform: scale(1); opacity: 1; } 50% { transform: scale(1.5); opacity: 0.5; } }
+        @keyframes fadeInLog { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
+    </style>
+</head>
+<body>
+
+    <div id="webgl-container"></div>
+
+    <div class="ui-layer">
+        <div class="header-panel">
+            <div class="stage-badge">Phase 3 Finalization</div>
+            <h1 class="title">Quantum Route Optimization</h1>
+            <div class="subtitle" id="main-status">Awaiting Telemetry...</div>
+        </div>
+
+        <div class="side-panel">
+            <div class="panel-header">
+                <div class="live-dot"></div>
+                QAOA Tactical Optimization
+            </div>
+            
+            <div class="metrics-grid">
+                <div class="metric-box">
+                    <div class="metric-label">States Evaluated</div>
+                    <div class="metric-value" id="val-states">0</div>
+                </div>
+                <div class="metric-box">
+                    <div class="metric-label">Confidence</div>
+                    <div class="metric-value highlight" id="val-conf">--%</div>
+                </div>
+                <div class="metric-box">
+                    <div class="metric-label">ETA Reduction</div>
+                    <div class="metric-value highlight" id="val-eta">-- min</div>
+                </div>
+                <div class="metric-box">
+                    <div class="metric-label">Bottlenecks</div>
+                    <div class="metric-value warn" id="val-bottle">0</div>
+                </div>
+            </div>
+
+            <ul class="log-list" id="log-list">
+                <!-- Logs populated by JS -->
+            </ul>
+        </div>
+    </div>
+
+    <script>
+        const socket = io();
+
+        // UI Elements
+        const logContainer = document.getElementById('log-list');
+        const mainStatus = document.getElementById('main-status');
+        const valStates = document.getElementById('val-states');
+        const valConf = document.getElementById('val-conf');
+        const valEta = document.getElementById('val-eta');
+        const valBottle = document.getElementById('val-bottle');
+
+        function appendLog(text) {
+            const li = document.createElement('li');
+            li.className = 'log-item';
+            li.innerText = `[${new Date().toLocaleTimeString()}] ${text}`;
+            li.style.animation = `fadeInLog 0.5s forwards`;
+            logContainer.appendChild(li);
+
+            document.querySelectorAll('.log-item').forEach(el => el.classList.remove('active'));
+            li.classList.add('active');
+            logContainer.scrollTop = logContainer.scrollHeight;
+        }
+
+        // --- THREE.JS SCENE SETUP ---
+        const container = document.getElementById('webgl-container');
+        const scene = new THREE.Scene();
+        scene.fog = new THREE.FogExp2(0x05050A, 0.015);
+
+        const camera = new THREE.PerspectiveCamera(50, window.innerWidth / window.innerHeight, 0.1, 1000);
+        camera.position.set(0, 25, 30);
+        camera.lookAt(0, 0, 0);
+
+        const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.setPixelRatio(window.devicePixelRatio);
+        // Post-processing glow would be nice, but we'll stick to basic materials with high emissive for "hackathon level"
+        container.appendChild(renderer.domElement);
+
+        // Grid
+        const gridHelper = new THREE.GridHelper(100, 40, 0x1e293b, 0x0f172a);
+        gridHelper.position.y = -2;
+        scene.add(gridHelper);
+
+        // Nodes
+        const sourcePos = new THREE.Vector3(-15, 0, 0); // Hospital
+        const destPos = new THREE.Vector3(15, 0, 0); // Patient
+        
+        function createGlowingNode(pos, color, scale) {
+            const geo = new THREE.SphereGeometry(scale, 32, 32);
+            const mat = new THREE.MeshBasicMaterial({ color: color });
+            const mesh = new THREE.Mesh(geo, mat);
+            mesh.position.copy(pos);
+            
+            // Halo
+            const haloGeo = new THREE.PlaneGeometry(scale*4, scale*4);
+            const haloMat = new THREE.MeshBasicMaterial({
+                color: color, transparent: true, opacity: 0.3,
+                blending: THREE.AdditiveBlending, side: THREE.DoubleSide, depthWrite: false
+            });
+            const halo = new THREE.Mesh(haloGeo, haloMat);
+            halo.rotation.x = -Math.PI/2;
+            mesh.add(halo);
+            
+            scene.add(mesh);
+            return mesh;
+        }
+
+        const sourceNode = createGlowingNode(sourcePos, 0x38bdf8, 1);
+        const destNode = createGlowingNode(destPos, 0xef4444, 1);
+
+        // Routes
+        // A: Top arc
+        // B: Direct (Beta/Optimal)
+        // C: Bottom arc
+        const curveA = new THREE.QuadraticBezierCurve3(sourcePos, new THREE.Vector3(0, 0, -10), destPos);
+        const curveB = new THREE.QuadraticBezierCurve3(sourcePos, new THREE.Vector3(0, 0, 0), destPos);
+        const curveC = new THREE.QuadraticBezierCurve3(sourcePos, new THREE.Vector3(0, 0, 10), destPos);
+
+        const routes = {};
+        function createRoute(curve, name, initColor) {
+            const points = curve.getPoints(50);
+            const geometry = new THREE.BufferGeometry().setFromPoints(points);
+            const material = new THREE.LineBasicMaterial({ color: initColor, transparent: true, opacity: 0.2 });
+            const line = new THREE.Line(geometry, material);
+            scene.add(line);
+            
+            routes[name] = { line, curve, color: initColor, particles: [] };
+        }
+
+        createRoute(curveA, 'alpha', 0x818cf8);
+        createRoute(curveB, 'beta', 0x818cf8);
+        createRoute(curveC, 'gamma', 0x818cf8);
+
+        // Particles
+        function spawnParticle(routeKey, color, size, speed, reverse=false) {
+            const route = routes[routeKey];
+            const geo = new THREE.SphereGeometry(size, 8, 8);
+            const mat = new THREE.MeshBasicMaterial({ color: color });
+            const mesh = new THREE.Mesh(geo, mat);
+            scene.add(mesh);
+            
+            route.particles.push({
+                mesh: mesh,
+                progress: reverse ? 1 : 0,
+                speed: speed,
+                reverse: reverse
+            });
+        }
+
+        // Animation Loop
+        let activeExploration = false;
+        function animate() {
+            requestAnimationFrame(animate);
+            const time = Date.now() * 0.001;
+            
+            // Slow camera drift
+            camera.position.x = Math.sin(time * 0.1) * 5;
+            camera.position.z = 30 + Math.cos(time * 0.1) * 5;
+            camera.lookAt(0,0,0);
+
+            // Particles
+            Object.keys(routes).forEach(key => {
+                const route = routes[key];
+                for(let i = route.particles.length - 1; i >= 0; i--) {
+                    const p = route.particles[i];
+                    if(p.reverse) {
+                        p.progress -= p.speed;
+                        if(p.progress < 0) {
+                            scene.remove(p.mesh);
+                            route.particles.splice(i, 1);
+                            continue;
+                        }
+                    } else {
+                        p.progress += p.speed;
+                        if(p.progress > 1) {
+                            if(activeExploration) p.progress = 0; // loop
+                            else {
+                                scene.remove(p.mesh);
+                                route.particles.splice(i, 1);
+                                continue;
+                            }
+                        }
+                    }
+                    const pos = route.curve.getPointAt(p.progress);
+                    p.mesh.position.copy(pos);
+                }
+            });
+
+            // Random metric updates during exploration
+            if(activeExploration && Math.random() > 0.9) {
+                const currentStates = parseInt(valStates.innerText);
+                if(currentStates < 1024) valStates.innerText = currentStates + Math.floor(Math.random() * 50);
+            }
+
+            renderer.render(scene, camera);
+        }
+        animate();
+
+        // --- STAGE LOGIC ---
+        socket.on('qaoa_stage3_log', (data) => appendLog(data.msg));
+
+        let bottlenecks = 0;
+
+        socket.on('qaoa_stage3_stage', (data) => {
+            if(data.msg) mainStatus.innerText = data.msg;
+            
+            if(data.stage === 'exploration') {
+                activeExploration = true;
+                // Flood all routes with particles
+                for(let i=0; i<5; i++) {
+                    spawnParticle('alpha', 0x818cf8, 0.2, 0.01 + Math.random()*0.01);
+                    spawnParticle('beta', 0x818cf8, 0.2, 0.01 + Math.random()*0.01);
+                    spawnParticle('gamma', 0x818cf8, 0.2, 0.01 + Math.random()*0.01);
+                }
+            } 
+            else if (data.stage === 'reject_alpha') {
+                routes['alpha'].line.material.color.setHex(0xef4444); // Red
+                bottlenecks++;
+                valBottle.innerText = bottlenecks;
+            } 
+            else if (data.stage === 'reject_gamma') {
+                routes['gamma'].line.material.color.setHex(0xf97316); // Orange
+                bottlenecks++;
+                valBottle.innerText = bottlenecks;
+            } 
+            else if (data.stage === 'collapse') {
+                activeExploration = false; // Stop looping old particles
+                valStates.innerText = '1024';
+            } 
+            else if (data.stage === 'complete') {
+                mainStatus.style.color = "#4ade80";
+                
+                // Highlight optimal route
+                routes['beta'].line.material.color.setHex(0x22c55e);
+                routes['beta'].line.material.opacity = 0.8;
+                
+                // Final reverse pulse "Path Locked"
+                spawnParticle('beta', 0xffffff, 0.5, 0.05, true);
+                
+                valConf.innerText = "98.4%";
+                valEta.innerText = "14 min";
+
+                // Change patient color to green
+                destNode.material.color.setHex(0x22c55e);
+
+                // Redirect to final dashboard
+                setTimeout(() => {
+                    const patientId = new URLSearchParams(window.location.search).get('patient_id') || 'UNKNOWN';
+                    window.location.href = '/qaoa_stage4?patient_id=' + patientId;
+                }, 4000);
+            }
+        });
+
+        // Start
+        socket.emit('start_qaoa_stage3', { status: 'init' });
+
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+    </script>
+</body>
+</html>
