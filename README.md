@@ -63,7 +63,7 @@ The system reduces ambulance response time, improves hospital preparedness, opti
 
 SDG Alignment
 
-SDG 3 – Good Health & Well-being
+SDG 3 – Good Health & Well-being...
 
 Contributors
 
