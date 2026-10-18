@@ -1,0 +1,361 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Donor Dashboard - Zero Hunger | Garuda Sanket</title>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;700&display=swap" rel="stylesheet">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.1/socket.io.js"></script>
+    <style>
+        :root {
+            --primary: #00f2fe;
+            --secondary: #4facfe;
+            --bg: #0a0b10;
+            --card-bg: #161821;
+            --text: #ffffff;
+            --accent: #f093fb;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: 'Outfit', sans-serif;
+        }
+
+        body {
+            background-color: var(--bg);
+            color: var(--text);
+            overflow-x: hidden;
+            min-height: 100vh;
+        }
+
+        .navbar {
+            padding: 1.5rem 3rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background: rgba(22, 24, 33, 0.8);
+            backdrop-filter: blur(10px);
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+            position: sticky;
+            top: 0;
+            z-index: 100;
+        }
+
+        .logo {
+            font-size: 1.5rem;
+            font-weight: 700;
+            background: linear-gradient(to right, var(--primary), var(--secondary));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 3rem auto;
+            padding: 0 2rem;
+        }
+
+        header {
+            margin-bottom: 3rem;
+            text-align: center;
+        }
+
+        header h1 {
+            font-size: 2.5rem;
+            margin-bottom: 0.5rem;
+        }
+
+        header p {
+            color: #a0a0a0;
+            font-size: 1.1rem;
+        }
+
+        .grid {
+            display: grid;
+            grid-template-columns: 1fr 350px;
+            gap: 2rem;
+        }
+
+        .requests-panel {
+            background: var(--card-bg);
+            border-radius: 20px;
+            padding: 2rem;
+            border: 1px solid rgba(255, 255, 255, 0.05);
+            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+        }
+
+        .requests-panel h2 {
+            margin-bottom: 2rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .requests-panel h2 span {
+            color: var(--primary);
+        }
+
+        #requests-list {
+            display: flex;
+            flex-direction: column;
+            gap: 1.5rem;
+        }
+
+        .request-card {
+            background: rgba(255, 255, 255, 0.03);
+            border-radius: 15px;
+            padding: 1.5rem;
+            border: 1px solid rgba(255, 255, 255, 0.05);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            transition: all 0.3s ease;
+            animation: slideIn 0.5s ease forwards;
+        }
+
+        @keyframes slideIn {
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .request-card:hover {
+            border-color: var(--primary);
+            background: rgba(0, 242, 254, 0.05);
+        }
+
+        .request-info h3 {
+            font-size: 1.2rem;
+            margin-bottom: 0.3rem;
+            text-transform: capitalize;
+        }
+
+        .request-info p {
+            font-size: 0.9rem;
+            color: #888;
+        }
+
+        .request-info .location {
+            color: var(--secondary);
+            font-weight: 600;
+        }
+
+        .accept-btn {
+            background: linear-gradient(to right, var(--primary), var(--secondary));
+            color: #000;
+            border: none;
+            padding: 0.8rem 1.5rem;
+            border-radius: 10px;
+            font-weight: 700;
+            cursor: pointer;
+            transition: transform 0.2s;
+        }
+
+        .accept-btn:hover {
+            transform: scale(1.05);
+            box-shadow: 0 5px 15px rgba(0, 242, 254, 0.3);
+        }
+
+        .stats-panel {
+            background: var(--card-bg);
+            border-radius: 20px;
+            padding: 2rem;
+            height: fit-content;
+            border: 1px solid rgba(255, 255, 255, 0.05);
+        }
+
+        .stat-item {
+            margin-bottom: 1.5rem;
+        }
+
+        .stat-label {
+            font-size: 0.8rem;
+            color: #888;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .stat-value {
+            font-size: 2rem;
+            font-weight: 700;
+        }
+
+        /* Modal / Notification */
+        #notification {
+            position: fixed;
+            bottom: 2rem;
+            right: 2rem;
+            background: var(--card-bg);
+            padding: 1.5rem;
+            border-radius: 15px;
+            border-left: 5px solid var(--primary);
+            box-shadow: 0 10px 40px rgba(0,0,0,0.8);
+            display: none;
+            z-index: 1000;
+        }
+
+        .empty-state {
+            text-align: center;
+            padding: 4rem 0;
+            color: #555;
+        }
+
+        .empty-state i {
+            font-size: 3rem;
+            display: block;
+            margin-bottom: 1rem;
+        }
+
+        .action-group {
+            display: flex;
+            gap: 10px;
+        }
+
+        .map-btn {
+            background: rgba(255, 255, 255, 0.05);
+            color: var(--primary);
+            border: 1px solid var(--primary);
+            padding: 0.8rem 1.2rem;
+            border-radius: 10px;
+            font-weight: 600;
+            cursor: pointer;
+            text-decoration: none;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 0.9rem;
+            transition: all 0.3s ease;
+        }
+
+        .map-btn:hover {
+            background: var(--primary);
+            color: #000;
+        }
+    </style>
+</head>
+<body>
+    <nav class="navbar">
+        <div class="logo">GARUDA SANKET | ZERO HUNGER</div>
+        <div>Donor Mode: <span id="donor-status" style="color: #4cd137;">Active</span></div>
+    </nav>
+
+    <div class="container">
+        <header>
+            <h1>Donor Dashboard</h1>
+            <p>Providing food to those in need, real-time across your city.</p>
+        </header>
+
+        <div class="grid">
+            <div class="requests-panel">
+                <h2>Incoming <span>Requests</span></h2>
+                <div id="requests-list">
+                    <div class="empty-state">
+                        <p>No active food requests at the moment. You're doing a great job!</p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="stats-panel">
+                <div class="stat-item">
+                    <p class="stat-label">Total Meals Donated</p>
+                    <p class="stat-value" id="total-donated">1,284</p>
+                </div>
+                <div class="stat-item">
+                    <p class="stat-label">People Reached</p>
+                    <p class="stat-value" id="people-reached">452</p>
+                </div>
+                <div class="stat-item">
+                    <p class="stat-label">Donor Name</p>
+                    <p class="stat-value" style="font-size: 1.2rem; color: var(--accent);">Grand Heritage Hotel</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="notification">
+        <h4 id="notif-title" style="margin-bottom: 0.5rem;">New Request!</h4>
+        <p id="notif-msg">A household in Bangalore needs grains.</p>
+    </div>
+
+    <script>
+        const socket = io();
+        const requestsList = document.getElementById('requests-list');
+        const donatedCount = document.getElementById('total-donated');
+
+        socket.on('new_food_request', (data) => {
+            console.log("New food request received:", data);
+            
+            // Remove empty state if present
+            if (requestsList.querySelector('.empty-state')) {
+                requestsList.innerHTML = '';
+            }
+
+            const googleMapsUrl = data.lat ? `https://www.google.com/maps?q=${data.lat},${data.lng}` : '#';
+
+            const card = document.createElement('div');
+            card.className = 'request-card';
+            card.innerHTML = `
+                <div class="request-info">
+                    <h3>${data.type} Needed</h3>
+                    <p>Phone: ****${data.phone.slice(-4)}</p>
+                    <p class="location" style="color: var(--primary);">Location: ${data.city} ${data.lat ? `(${data.lat.toFixed(2)}, ${data.lng.toFixed(2)})` : ''}</p>
+                    <p style="font-size: 0.7rem; margin-top: 5px; color: #666;">Time: ${data.timestamp}</p>
+                </div>
+                <div class="action-group">
+                    ${data.lat ? `<a href="${googleMapsUrl}" target="_blank" class="map-btn">📍 GOOGLE MAPS</a>` : ''}
+                    <button class="accept-btn" onclick="acceptRequest('${data.phone}', this)">Accept Request</button>
+                </div>
+            `;
+            requestsList.prepend(card);
+            
+            showNotification(`New Request!`, `${data.type} needed in ${data.city}`);
+        });
+
+        function acceptRequest(phone, btn) {
+            btn.innerHTML = 'Connecting...';
+            btn.disabled = true;
+            
+            // Notify server
+            socket.emit('donor_accept', {
+                phone: phone,
+                donor_name: "Grand Heritage Hotel"
+            });
+
+            // Get location link if it exists
+            const mapBtn = btn.parentElement.querySelector('.map-btn');
+            const mapHtml = mapBtn ? mapBtn.outerHTML : '';
+
+            // Update UI
+            setTimeout(() => {
+                const card = btn.closest('.request-card');
+                card.style.borderColor = '#4cd137';
+                card.style.background = 'rgba(76, 209, 55, 0.1)';
+                card.innerHTML = `
+                    <div class="request-info">
+                        <h3 style="color: #4cd137;">✓ Request Accepted</h3>
+                        <p>Contact Seeker: <strong>${phone}</strong></p>
+                        <p style="margin-top: 5px;">Dialing option enabled on seeker's phone.</p>
+                    </div>
+                    <div class="action-group">
+                        ${mapHtml}
+                        <span style="background: #4cd137; color: #000; padding: 0.8rem 1.2rem; border-radius: 10px; font-weight: 700;">CONNECTED</span>
+                    </div>
+                `;
+                
+                // Update stats
+                let current = parseInt(donatedCount.innerText.replace(',', ''));
+                donatedCount.innerText = (current + 1).toLocaleString();
+            }, 1000);
+        }
+
+        function showNotification(title, msg) {
+            const notif = document.getElementById('notification');
+            document.getElementById('notif-title').innerText = title;
+            document.getElementById('notif-msg').innerText = msg;
+            notif.style.display = 'block';
+            setTimeout(() => { notif.style.display = 'none'; }, 5000);
+        }
+    </script>
+</body>
+</html>

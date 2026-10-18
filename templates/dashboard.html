@@ -1,0 +1,452 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GARUDA SANKET | Control Center</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.1/socket.io.js"></script>
+
+    <style>
+        :root {
+            --bg: #0f172a;
+            --card: #1e293b;
+            --text: #f8fafc;
+            --primary: #38bdf8;
+            --red: #ef4444;
+            --green: #22c55e;
+            --yellow: #eab308;
+            --accent: #8b5cf6;
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            background-color: var(--bg);
+            color: var(--text);
+            font-family: 'Inter', -apple-system, sans-serif;
+            margin: 0;
+            display: flex;
+            justify-content: center;
+            min-height: 100vh;
+        }
+
+        .container {
+            width: 100%;
+            max-width: 500px;
+            padding: 20px;
+        }
+
+        header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 10px 0 20px 0;
+            border-bottom: 1px solid #334155;
+            margin-bottom: 20px;
+        }
+
+        .status-badge {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 0.8rem;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        #status-dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            background: #475569;
+        }
+
+        .online #status-dot {
+            background: var(--green);
+            box-shadow: 0 0 10px var(--green);
+        }
+
+        .control-card {
+            background: var(--card);
+            padding: 20px;
+            border-radius: 16px;
+            margin-bottom: 15px;
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+            border: 1px solid #334155;
+        }
+
+        h3 {
+            margin-top: 0;
+            font-size: 0.9rem;
+            color: var(--primary);
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+
+        .grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 12px;
+        }
+
+        button {
+            width: 100%;
+            border: none;
+            padding: 14px;
+            border-radius: 10px;
+            font-weight: 700;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            background: #334155;
+            color: white;
+            font-size: 0.9rem;
+        }
+
+        button:active {
+            transform: scale(0.96);
+        }
+
+        button:hover {
+            filter: brightness(1.2);
+        }
+
+        .btn-start {
+            background: var(--primary);
+            color: #0f172a;
+            font-size: 1.1rem;
+            margin-bottom: 15px;
+        }
+
+        .btn-lang {
+            background: #475569;
+        }
+
+        .active-lang {
+            border: 2px solid var(--primary);
+            background: #1e293b;
+        }
+
+        .btn-red {
+            background: var(--red);
+            grid-column: span 2;
+            padding: 20px;
+            font-size: 1.1rem;
+        }
+
+        .btn-yellow {
+            background: var(--yellow);
+            color: #000;
+        }
+
+        .btn-green {
+            background: var(--green);
+        }
+
+        .hidden {
+            display: none;
+        }
+
+        #terminal {
+            background: #000;
+            padding: 10px;
+            border-radius: 8px;
+            font-family: monospace;
+            font-size: 0.75rem;
+            color: #10b981;
+            height: 100px;
+            overflow-y: auto;
+            margin-top: 10px;
+        }
+    </style>
+</head>
+
+<body class="offline" id="body-status">
+    <div class="container">
+        <header>
+            <h1 style="margin:0; font-size: 1.5rem;">🦅 GARUDA SANKET</h1>
+            <div style="display: flex; gap: 10px; align-items: center;">
+                <a href="/buyer" style="color: var(--primary); text-decoration: none; font-size: 0.8rem; font-weight: bold;">BUYER</a>
+                <a href="/panchayat" style="color: var(--accent); text-decoration: none; font-size: 0.8rem; font-weight: bold;">PANCHAYAT</a>
+                <a href="/donor" id="donor-link" style="color: #4cd137; text-decoration: none; font-size: 0.8rem; font-weight: bold; border: 1px solid #4cd137; padding: 2px 8px; border-radius: 5px;">DONOR DASHBOARD</a>
+                <div class="status-badge">
+                    <div id="status-dot"></div>
+                    <span id="status-text">SYSTEM OFFLINE</span>
+                </div>
+            </div>
+        </header>
+
+        <div
+            style="font-size: 0.85rem; color: #f8fafc; text-align: center; margin: 0 0 20px 0; padding: 15px; background: rgba(56, 189, 248, 0.1); border-radius: 12px; border: 2px solid var(--primary); box-shadow: 0 0 15px rgba(56, 189, 248, 0.2);">
+            <span style="color: var(--primary); font-weight: 800; text-transform: uppercase; letter-spacing: 1px;">⚠️
+                IMPORTANT REFERENCE</span><br>
+            <p style="margin: 5px 0 0 0; opacity: 0.9;">In production, <b>keypad phones communicate directly with the
+                    server</b>. This dashboard is provided solely for visualization and judge reference.</p>
+        </div>
+
+        <section class="control-card">
+            <h3>1. Initialization</h3>
+            <button class="btn-start" onclick="triggerStart()">🚀 START NEW CALL</button>
+            <div class="grid">
+                <button class="btn-lang" id="btn-en" onclick="setLang('en')">ENGLISH</button>
+                <button class="btn-lang" id="btn-kn" onclick="setLang('kn')">ಕನ್ನಡ (KANNADA)</button>
+            </div>
+        </section>
+
+        <section class="control-card">
+            <h3 style="color: #94a3b8; font-size: 1.1rem; text-transform: none; letter-spacing: normal; margin-bottom: 12px;">Location</h3>
+            <div style="display: flex; gap: 10px; align-items: stretch;">
+                <div style="flex: 1; background: white; border: 2px solid #e2e8f0; border-radius: 8px; padding: 12px; display: flex; align-items: center; overflow: hidden;">
+                    <span id="loc-display" style="color: #0f172a; font-family: sans-serif; font-size: 1rem; white-space: nowrap;">Lat: 13.3951, Lng: 77.728</span>
+                </div>
+                <button onclick="useMyLocation()" style="background: #64748b; color: white; width: auto; margin: 0; padding: 12px 20px; font-weight: bold; font-size: 0.9rem; border-radius: 8px; display: flex; align-items: center; gap: 8px; box-shadow: none;">
+                    <span style="color: #ef4444; font-size: 1.1rem;">📍</span> USE MY LOCATION
+                </button>
+            </div>
+        </section>
+
+        <section class="control-card" style="border: 2px solid var(--red); background: rgba(239, 68, 68, 0.05);">
+            <h3 style="color: var(--red);">🚨 VĀYU EMERGENCY DISPATCH</h3>
+            <div class="grid">
+                <button onclick="triggerEmergencyTMT()" style="grid-column: span 2; background: var(--red); font-size: 1.2rem; animation: pulse 2s infinite;">
+                    🔴 TRIGGER TMT BROADCAST
+                </button>
+            </div>
+        </section>
+
+
+
+        <div id="terminal">> Waiting for connection...</div>
+    </div>
+
+    <script>
+        const socket = io();
+        const logPanel = document.getElementById('terminal');
+
+        function log(msg) {
+            const time = new Date().toLocaleTimeString();
+            logPanel.innerHTML += `<div>[${time}] ${msg}</div>`;
+            logPanel.scrollTop = logPanel.scrollHeight;
+        }
+
+        socket.on('connect', () => {
+            document.getElementById('body-status').className = 'online';
+            document.getElementById('status-text').innerText = "SYSTEM ONLINE";
+            log("Connected to Garuda Sanket Server.");
+        });
+
+        socket.on('disconnect', () => {
+            document.getElementById('body-status').className = 'offline';
+            document.getElementById('status-text').innerText = "SYSTEM OFFLINE";
+            log("Disconnected from server.");
+        });
+
+        socket.on('status_update', (data) => {
+            log(data.msg);
+        });
+
+        socket.on('donor_accepted_notify', (data) => {
+            const card = document.getElementById('dial-donor-card');
+            card.classList.remove('hidden');
+            document.getElementById('donor-accepted-msg').innerText = `${data.donor_name} has accepted your request!`;
+            
+            // Auto-scroll to the button so the user sees it immediately
+            card.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            
+            log(`ACTION REQUIRED: Press 1 to dial ${data.donor_name}`);
+        });
+
+        // ACTIONS
+        function triggerStart() {
+            socket.emit('trigger_start');
+            log("Triggered: Welcome Message");
+        }
+
+        function setLang(lang) {
+            socket.emit('select_language', { lang: lang });
+            document.getElementById('btn-en').classList.remove('active-lang');
+            document.getElementById('btn-kn').classList.remove('active-lang');
+            document.getElementById(`btn-${lang}`).classList.add('active-lang');
+            log(`Language set to: ${lang.toUpperCase()}`);
+        }
+
+        let currentCoords = { lat: 13.3951, lng: 77.7280 }; // Default
+
+        function useMyLocation() {
+            if (navigator.geolocation && window.isSecureContext) {
+                log("Fetching user location...");
+                navigator.geolocation.getCurrentPosition(
+                    (position) => {
+                        currentCoords.lat = position.coords.latitude;
+                        currentCoords.lng = position.coords.longitude;
+                        
+                        const latStr = currentCoords.lat.toFixed(4);
+                        const lngStr = currentCoords.lng.toFixed(4);
+                        
+                        document.getElementById('loc-display').innerText = `Lat: ${latStr}, Lng: ${lngStr}`;
+                        socket.emit('select_location', { lat: latStr, lng: lngStr });
+                        log(`Location updated: Lat ${latStr}, Lng ${lngStr}`);
+                    },
+                    (error) => {
+                        log(`Geolocation error: ${error.message}`);
+                    },
+                    { enableHighAccuracy: true, maximumAge: 0 }
+                );
+            } else {
+                log("Using real location fallback...");
+                currentCoords.lat = 13.3951;
+                currentCoords.lng = 77.7280;
+                const latStr = currentCoords.lat.toFixed(4);
+                const lngStr = currentCoords.lng.toFixed(4);
+                
+                document.getElementById('loc-display').innerText = `Lat: ${latStr}, Lng: ${lngStr}`;
+                socket.emit('select_location', { lat: latStr, lng: lngStr });
+                log(`Location updated: Lat ${latStr}, Lng ${lngStr}`);
+            }
+        }
+
+        function triggerEmergencyTMT() {
+            log(`Triggering Vāyu Emergency TMT Token...`);
+            socket.emit('trigger_emergency_tmt', {
+                lat: currentCoords.lat,
+                lng: currentCoords.lng,
+                severity: 'RED'
+            });
+        }
+        
+        function selectDomain(domain) {
+            document.getElementById('domain-selection').classList.add('hidden');
+
+            document.getElementById('agri-menu').classList.add('hidden');
+            document.getElementById('health-menu').classList.add('hidden');
+            document.getElementById('hunger-menu').classList.add('hidden');
+            document.getElementById('food-type-menu').classList.add('hidden');
+
+            socket.emit('select_domain', { 
+                domain: domain,
+                lat: currentCoords.lat,
+                lng: currentCoords.lng
+            });
+            log(`Domain Selected: ${domain.toUpperCase()}`);
+
+            if (domain === 'hunger') {
+                // User wants no options, just confirmation. 
+                // app.py handles the immediate broadcast.
+                document.getElementById('hunger-menu').classList.remove('hidden');
+            } else if (domain === 'agriculture') {
+                document.getElementById('agri-menu').classList.remove('hidden');
+            } else if (domain === 'health' || domain === 'healthcare') {
+                document.getElementById('health-menu').classList.remove('hidden');
+            }
+        }
+
+        function hungerAction(action) {
+            document.getElementById('food-type-menu').classList.add('hidden');
+            if (action === 'request') {
+                document.getElementById('food-type-menu').classList.remove('hidden');
+            }
+            socket.emit('hunger_action', { action: action });
+            log(`Hunger Action: ${action.toUpperCase()}`);
+        }
+
+        function foodTypeAction(type) {
+            document.getElementById('food-type-menu').classList.add('hidden');
+            socket.emit('food_type_action', { type: type });
+            log(`Food Type: ${type.toUpperCase()}`);
+        }
+
+        function dialDonor() {
+            document.getElementById('dial-donor-card').classList.add('hidden');
+            socket.emit('donor_dial');
+            log(`Dialing Donor...`);
+        }
+
+        function healthAction(action) {
+            document.getElementById('sugar-menu-card').classList.add('hidden');
+            document.getElementById('bp-menu-card').classList.add('hidden');
+            document.getElementById('symptom-menu-card').classList.add('hidden');
+
+            if (action === 'sugar') {
+                document.getElementById('sugar-menu-card').classList.remove('hidden');
+            } else if (action === 'bp') {
+                document.getElementById('bp-menu-card').classList.remove('hidden');
+            } else if (action === 'symptom') {
+                document.getElementById('symptom-menu-card').classList.remove('hidden');
+            }
+            // Medicine doesn't have a submenu yet, it just triggers audio.
+            socket.emit('health_action', { action: action });
+            log(`Health Action: ${action.toUpperCase()}`);
+        }
+
+        function sugarAction(level) {
+            document.getElementById('sugar-menu-card').classList.add('hidden');
+            socket.emit('sugar_action', { level: level });
+            log(`Sugar Level Selected: ${level.toUpperCase()}`);
+        }
+
+        function bpAction(level) {
+            document.getElementById('bp-menu-card').classList.add('hidden');
+            socket.emit('bp_action', { level: level });
+            log(`BP Level Selected: ${level.toUpperCase()}`);
+        }
+
+        function symptomAction(symptom) {
+            document.getElementById('symptom-menu-card').classList.add('hidden');
+            socket.emit('symptom_action', { symptom: symptom });
+            log(`Symptom Selected: ${symptom.toUpperCase()}`);
+        }
+
+        function triggerAgri(action) {
+            // Hide sub-menus first
+            document.getElementById('market-response-card').classList.add('hidden');
+            document.getElementById('pest-menu-card').classList.add('hidden');
+            document.getElementById('acreage-card').classList.add('hidden');
+            document.getElementById('sarkari-final-card').classList.add('hidden');
+
+            if (action === 'market_price') {
+                document.getElementById('market-response-card').classList.remove('hidden');
+            } else if (action === 'pest_report') {
+                document.getElementById('pest-menu-card').classList.remove('hidden');
+            } else if (action === 'sarkari_help') {
+                document.getElementById('acreage-card').classList.remove('hidden');
+            }
+            
+            socket.emit('agri_action', { action: action });
+            log(`Agri Action: ${action}`);
+        }
+
+        function marketResponse(response) {
+            document.getElementById('market-response-card').classList.add('hidden');
+            socket.emit('market_response', { response: response });
+            log(`Market Response: ${response.toUpperCase()}`);
+        }
+
+        function pestAction(problem) {
+            document.getElementById('pest-menu-card').classList.add('hidden');
+            socket.emit('pest_action', { problem: problem });
+            log(`Pest Action: ${problem.toUpperCase()}`);
+        }
+
+        function sarkariAction(acreage) {
+            document.getElementById('acreage-card').classList.add('hidden');
+            document.getElementById('sarkari-final-card').classList.remove('hidden');
+            socket.emit('sarkari_action', { acreage: acreage });
+            log(`Acreage Selected: ${acreage.toUpperCase()}`);
+        }
+
+        function sarkariFinal(decision) {
+            document.getElementById('sarkari-final-card').classList.add('hidden');
+            socket.emit('sarkari_final', { decision: decision });
+            log(`Scheme Decision: ${decision.toUpperCase()}`);
+        }
+
+        function triggerEmergency(level) {
+            socket.emit('emergency_trigger', { level: level });
+            log(`EMERGENCY: ${level} LEVEL ACTIVATED`);
+        }
+    </script>
+</body>
+
+</html>
