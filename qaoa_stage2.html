@@ -1,0 +1,508 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Vistaar QAOA | Quantum Circuit</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.1/socket.io.js"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;800&family=Fira+Code:wght@400;600&display=swap');
+
+        body {
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+            background-color: #05050A;
+            font-family: 'Inter', sans-serif;
+            color: #ffffff;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+        }
+
+        /* Ambient Glow */
+        .ambient-bg {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            background: radial-gradient(circle at 50% 50%, rgba(99, 102, 241, 0.1), transparent 70%);
+            z-index: 0;
+        }
+
+        /* Glassmorphic Overlay UI (Reused) */
+        .ui-layer {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            z-index: 10;
+            pointer-events: none;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            padding: 40px;
+            box-sizing: border-box;
+        }
+
+        .header-panel {
+            text-align: center;
+            animation: fadeInDown 1s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+        }
+
+        .stage-badge {
+            display: inline-block;
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+            padding: 8px 16px;
+            border-radius: 20px;
+            font-size: 0.8rem;
+            letter-spacing: 2px;
+            text-transform: uppercase;
+            color: #c084fc;
+            margin-bottom: 15px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.5), inset 0 0 10px rgba(192, 132, 252, 0.2);
+        }
+
+        .title {
+            font-size: 3rem;
+            font-weight: 800;
+            margin: 0;
+            background: linear-gradient(135deg, #ffffff 0%, #c084fc 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            text-shadow: 0 0 40px rgba(192, 132, 252, 0.3);
+            letter-spacing: -1px;
+        }
+
+        .subtitle {
+            font-size: 1.2rem;
+            color: #94a3b8;
+            margin-top: 10px;
+            font-weight: 300;
+        }
+
+        .side-panel {
+            position: absolute;
+            bottom: 40px;
+            right: 40px;
+            width: 380px;
+            background: rgba(15, 23, 42, 0.6);
+            backdrop-filter: blur(16px);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            border-radius: 16px;
+            padding: 24px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.4);
+        }
+
+        .panel-header {
+            font-size: 0.9rem;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            color: #cbd5e1;
+            margin-bottom: 20px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .live-dot {
+            width: 8px;
+            height: 8px;
+            background-color: #22c55e;
+            border-radius: 50%;
+            box-shadow: 0 0 10px #22c55e;
+            animation: pulse 2s infinite;
+        }
+
+        .log-list {
+            list-style: none;
+            padding: 0;
+            margin: 0;
+            font-family: 'Fira Code', monospace;
+            font-size: 0.8rem;
+            color: #94a3b8;
+            max-height: 200px;
+            overflow-y: auto;
+        }
+
+        .log-list::-webkit-scrollbar { width: 4px; }
+        .log-list::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.2); }
+
+        .log-item {
+            margin-bottom: 12px;
+            padding-left: 15px;
+            position: relative;
+            opacity: 0;
+        }
+
+        .log-item::before {
+            content: '>';
+            position: absolute;
+            left: 0;
+            color: #c084fc;
+        }
+
+        .log-item.active {
+            color: #f8fafc;
+            text-shadow: 0 0 10px rgba(255,255,255,0.3);
+        }
+
+        /* --- QUANTUM CIRCUIT CSS --- */
+        .circuit-container {
+            position: relative;
+            z-index: 5;
+            width: 800px;
+            height: 400px;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-around;
+            padding: 20px;
+        }
+
+        .qubit-line {
+            display: flex;
+            align-items: center;
+            width: 100%;
+            height: 40px;
+            position: relative;
+            opacity: 0; /* Hidden initially */
+            transform: translateX(-50px);
+            transition: all 1s ease;
+        }
+
+        .qubit-line.visible {
+            opacity: 1;
+            transform: translateX(0);
+        }
+
+        .qubit-label {
+            font-family: 'Fira Code', monospace;
+            font-size: 1.2rem;
+            color: #e2e8f0;
+            width: 50px;
+            text-align: right;
+            margin-right: 20px;
+            text-shadow: 0 0 10px rgba(255,255,255,0.5);
+        }
+
+        .wire {
+            flex-grow: 1;
+            height: 2px;
+            background: linear-gradient(90deg, rgba(255,255,255,0.1), rgba(192, 132, 252, 0.8), rgba(255,255,255,0.1));
+            position: relative;
+            box-shadow: 0 0 10px rgba(192, 132, 252, 0.4);
+        }
+
+        /* Gates */
+        .gate {
+            position: absolute;
+            top: 50%;
+            transform: translateY(-50%) scale(0);
+            width: 40px;
+            height: 40px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-family: 'Fira Code', monospace;
+            font-weight: 600;
+            border-radius: 8px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.5);
+            transition: all 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+            z-index: 2;
+        }
+
+        .gate.visible {
+            transform: translateY(-50%) scale(1);
+        }
+
+        .gate-h {
+            background: rgba(56, 189, 248, 0.2);
+            border: 1px solid rgba(56, 189, 248, 0.8);
+            color: #38bdf8;
+            box-shadow: 0 0 15px rgba(56, 189, 248, 0.4);
+        }
+
+        .gate-rx, .gate-ry {
+            background: rgba(192, 132, 252, 0.2);
+            border: 1px solid rgba(192, 132, 252, 0.8);
+            color: #c084fc;
+            box-shadow: 0 0 15px rgba(192, 132, 252, 0.4);
+        }
+
+        /* CNOT Elements */
+        .cnot-dot {
+            position: absolute;
+            top: 50%;
+            transform: translateY(-50%) scale(0);
+            width: 12px;
+            height: 12px;
+            background: #22c55e;
+            border-radius: 50%;
+            box-shadow: 0 0 15px #22c55e;
+            transition: all 0.5s;
+            z-index: 2;
+        }
+
+        .cnot-target {
+            position: absolute;
+            top: 50%;
+            transform: translateY(-50%) scale(0);
+            width: 20px;
+            height: 20px;
+            border: 2px solid #22c55e;
+            border-radius: 50%;
+            box-shadow: 0 0 15px rgba(34, 197, 94, 0.4);
+            transition: all 0.5s;
+            z-index: 2;
+        }
+
+        .cnot-target::before, .cnot-target::after {
+            content: '';
+            position: absolute;
+            background: #22c55e;
+        }
+        .cnot-target::before { top: -2px; bottom: -2px; left: 8px; width: 2px; }
+        .cnot-target::after { left: -2px; right: -2px; top: 8px; height: 2px; }
+
+        .cnot-line {
+            position: absolute;
+            width: 2px;
+            background: rgba(34, 197, 94, 0.8);
+            box-shadow: 0 0 10px #22c55e;
+            left: 5px; /* Center with dot */
+            transform-origin: top;
+            transform: scaleY(0);
+            transition: transform 0.5s ease 0.5s; /* Delay until dots appear */
+            z-index: 1;
+        }
+
+        .cnot-dot.visible, .cnot-target.visible { transform: translateY(-50%) scale(1); }
+        .cnot-line.visible { transform: scaleY(1); }
+
+        /* Data Pulses */
+        .pulse {
+            position: absolute;
+            top: 50%;
+            left: 0;
+            width: 20px;
+            height: 4px;
+            background: #ffffff;
+            box-shadow: 0 0 15px 5px #ffffff;
+            border-radius: 4px;
+            transform: translateY(-50%);
+            opacity: 0;
+            z-index: 3;
+        }
+
+        .pulse.running {
+            animation: pulseRun 2s linear infinite;
+        }
+
+        /* Animations */
+        @keyframes fadeInDown { to { opacity: 1; transform: translateY(0); } }
+        @keyframes pulse { 0%, 100% { transform: scale(1); opacity: 1; } 50% { transform: scale(1.5); opacity: 0.5; } }
+        @keyframes fadeInLog { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
+        @keyframes pulseRun {
+            0% { left: 0; opacity: 0; }
+            10% { opacity: 1; }
+            90% { opacity: 1; }
+            100% { left: 100%; opacity: 0; }
+        }
+    </style>
+</head>
+<body>
+
+    <div class="ambient-bg"></div>
+
+    <div class="circuit-container" id="circuit">
+        <!-- Qubits injected by JS -->
+    </div>
+
+    <div class="ui-layer">
+        <div class="header-panel">
+            <div class="stage-badge">Phase 2 Sequence</div>
+            <h1 class="title">Quantum Circuit Init</h1>
+            <div class="subtitle" id="main-status">Awaiting Telemetry...</div>
+        </div>
+
+        <div class="side-panel">
+            <div class="panel-header">
+                <div class="live-dot"></div>
+                QAOA Qiskit Engine
+            </div>
+            <ul class="log-list" id="log-list">
+                <!-- Logs populated by JS -->
+            </ul>
+        </div>
+    </div>
+
+    <script>
+        const socket = io();
+
+        // UI Elements
+        const logContainer = document.getElementById('log-list');
+        const mainStatus = document.getElementById('main-status');
+        const circuitContainer = document.getElementById('circuit');
+
+        // Append log to sidebar
+        function appendLog(text) {
+            const li = document.createElement('li');
+            li.className = 'log-item';
+            li.innerText = text;
+            li.style.animation = `fadeInLog 0.5s forwards`;
+            logContainer.appendChild(li);
+
+            document.querySelectorAll('.log-item').forEach(el => el.classList.remove('active'));
+            li.classList.add('active');
+            logContainer.scrollTop = logContainer.scrollHeight;
+        }
+
+        // Generate Circuit Structure
+        const numQubits = 4;
+        const wires = [];
+        
+        function initQubits() {
+            for(let i=0; i<numQubits; i++) {
+                const line = document.createElement('div');
+                line.className = 'qubit-line';
+                
+                const label = document.createElement('div');
+                label.className = 'qubit-label';
+                label.innerText = `q${i}`;
+                
+                const wire = document.createElement('div');
+                wire.className = 'wire';
+                wire.id = `wire-${i}`;
+                
+                line.appendChild(label);
+                line.appendChild(wire);
+                circuitContainer.appendChild(line);
+                wires.push(wire);
+
+                // Staggered appearance
+                setTimeout(() => {
+                    line.classList.add('visible');
+                }, i * 200);
+            }
+        }
+
+        function addGate(wireIndex, type, positionPercent) {
+            const wire = wires[wireIndex];
+            const gate = document.createElement('div');
+            gate.className = `gate gate-${type.toLowerCase()}`;
+            gate.style.left = `${positionPercent}%`;
+            gate.innerText = type;
+            wire.appendChild(gate);
+            
+            // Trigger animation
+            setTimeout(() => gate.classList.add('visible'), 50);
+        }
+
+        function addCNOT(controlWireIdx, targetWireIdx, positionPercent) {
+            // Distance Calculation (Assumption: even spacing between wires)
+            const wireHeight = 40 + (400/4)*0.5; // roughly 100px apart due to flex space-around
+            
+            const ctrlWire = wires[controlWireIdx];
+            const tgtWire = wires[targetWireIdx];
+
+            const dot = document.createElement('div');
+            dot.className = 'cnot-dot';
+            dot.style.left = `${positionPercent}%`;
+
+            const tgt = document.createElement('div');
+            tgt.className = 'cnot-target';
+            tgt.style.left = `calc(${positionPercent}% - 4px)`; // Offset for size difference
+
+            // Vertical line originating from control dot
+            const line = document.createElement('div');
+            line.className = 'cnot-line';
+            line.style.top = '6px'; // Center of dot
+            
+            // Calculate height between control and target
+            const dist = Math.abs(targetWireIdx - controlWireIdx);
+            // Height is roughly (containerHeight / numQubits) * dist
+            const pxHeight = (400 / numQubits) * dist;
+            line.style.height = `${pxHeight}px`;
+
+            // If target is above control, rotate line up
+            if(targetWireIdx < controlWireIdx) {
+                line.style.transformOrigin = 'top';
+                line.style.transform = `scaleY(0) rotate(180deg)`;
+            }
+
+            dot.appendChild(line);
+            ctrlWire.appendChild(dot);
+            tgtWire.appendChild(tgt);
+
+            setTimeout(() => {
+                dot.classList.add('visible');
+                tgt.classList.add('visible');
+                
+                // Trigger line growth after dots appear
+                setTimeout(() => {
+                    if(targetWireIdx < controlWireIdx) {
+                        line.style.transform = `scaleY(1) rotate(180deg)`;
+                    } else {
+                        line.style.transform = `scaleY(1)`;
+                    }
+                    line.classList.add('visible');
+                }, 500);
+            }, 50);
+        }
+
+        function startPulses() {
+            wires.forEach((wire, i) => {
+                const pulse = document.createElement('div');
+                pulse.className = 'pulse';
+                pulse.style.animationDelay = `${Math.random() * 2}s`;
+                wire.appendChild(pulse);
+                
+                // Allow CSS to render before adding class
+                setTimeout(() => pulse.classList.add('running'), 50);
+            });
+        }
+
+        // --- DYNAMIC SOCKET LISTENERS ---
+        socket.on('qaoa_stage2_log', (data) => {
+            appendLog(data.msg);
+        });
+
+        socket.on('qaoa_stage2_stage', (data) => {
+            if(data.msg) mainStatus.innerText = data.msg;
+            
+            if(data.stage === 'qubits') {
+                initQubits();
+            } else if (data.stage === 'hadamard') {
+                addGate(0, 'H', 15);
+                addGate(1, 'H', 15);
+                addGate(2, 'H', 15);
+                addGate(3, 'H', 15);
+            } else if (data.stage === 'rxry') {
+                addGate(0, 'RX', 35);
+                addGate(1, 'RY', 35);
+                addGate(2, 'RX', 35);
+                addGate(3, 'RY', 35);
+            } else if (data.stage === 'cnot') {
+                addCNOT(0, 1, 60);
+                setTimeout(() => addCNOT(2, 3, 75), 800);
+            } else if (data.stage === 'complete') {
+                mainStatus.style.color = "#4ade80";
+                startPulses();
+                setTimeout(() => {
+                    const urlParams = new URLSearchParams(window.location.search);
+                    const patientId = urlParams.get('patient_id') || 'UNKNOWN';
+                    window.location.href = '/qaoa_stage3?patient_id=' + patientId;
+                }, 3000);
+            }
+        });
+
+        // Start Stage 2 Engine
+        socket.emit('start_qaoa_stage2', { status: 'init' });
+    </script>
+</body>
+</html>
